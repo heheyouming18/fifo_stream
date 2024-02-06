@@ -38,7 +38,7 @@ void fifo_pop(const char *log, size_t size) {
     printf("%.*s", (int)size, log);
 }
 
-static void test_fifo(void);
+static void test_fifo_push(void);
 
 int main(void) {
     /* close printf buffer */
