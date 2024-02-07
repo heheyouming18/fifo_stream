@@ -26,6 +26,7 @@
  * Created on: 2015-04-28
  */
 
+#if defined(__linux__)
 #include <fifo.h>
 #include <stdio.h>
 #include <pthread.h>
@@ -36,17 +37,9 @@
 #include <sched.h>
 #include <semaphore.h>
 
-/* thread default stack size */
-#if PTHREAD_STACK_MIN > 4*1024
-#define FIFO_ASYNC_OUTPUT_PTHREAD_STACK_SIZE     PTHREAD_STACK_MIN
-#else
-#define FIFO_ASYNC_OUTPUT_PTHREAD_STACK_SIZE     (1*1024)
-#endif
-/* thread default priority */
-#define FIFO_ASYNC_OUTPUT_PTHREAD_PRIORITY       (sched_get_priority_max(SCHED_RR) - 1)
-
 static pthread_mutex_t output_mutex_lock;
 static sem_t output_notice_sem;
+
 /* asynchronous output pthread thread */
 static pthread_t async_output_thread;
 
@@ -98,9 +91,9 @@ FifoErrCode fifo_async_init(void) {
     thread_running = true;
 
     pthread_attr_init(&thread_attr);
-    pthread_attr_setstacksize(&thread_attr, FIFO_ASYNC_OUTPUT_PTHREAD_STACK_SIZE);
+    pthread_attr_setstacksize(&thread_attr, (1*1024));
     pthread_attr_setschedpolicy(&thread_attr, SCHED_RR);
-    thread_sched_param.sched_priority = FIFO_ASYNC_OUTPUT_PTHREAD_PRIORITY;
+    thread_sched_param.sched_priority = (sched_get_priority_max(SCHED_RR) - 1);
     pthread_attr_setschedparam(&thread_attr, &thread_sched_param);
 
     extern void async_output_task(void *arg);
@@ -133,3 +126,4 @@ void fifo_async_deinit(void) {
     init_ok = false;
 }
 
+#endif

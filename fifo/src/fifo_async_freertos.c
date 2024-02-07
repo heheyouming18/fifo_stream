@@ -22,17 +22,16 @@
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
- * Function: Portable interface for linux.
+ * Function: Portable interface for freertos.
  * Created on: 2015-04-28
  */
 
+#if defined(_MBCS) // visual studio build
 #include <fifo.h>
 #include <stdio.h>
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
-
-#define LOG_ASYNC_OUTPUT_TASK_PRIORITY      ( tskIDLE_PRIORITY + 2 )
 
 static SemaphoreHandle_t output_notice_sem;
 static SemaphoreHandle_t output_mutex_lock;
@@ -97,7 +96,7 @@ FifoErrCode fifo_async_init(void) {
     // pthread_attr_destroy(&thread_attr);
 
     extern void async_output_task(void *arg);
-    xTaskCreate(async_output_task, "async_output_task", configMINIMAL_STACK_SIZE, NULL, LOG_ASYNC_OUTPUT_TASK_PRIORITY, NULL);
+    xTaskCreate(async_output_task, "async_output_task", configMINIMAL_STACK_SIZE, NULL, (tskIDLE_PRIORITY + 2), NULL);
 
     init_ok = true;
 
@@ -132,4 +131,4 @@ void fifo_async_deinit(void) {
     init_ok = false;
 }
 
-
+#endif
