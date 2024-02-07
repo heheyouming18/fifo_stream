@@ -45,9 +45,7 @@
 /* thread default priority */
 #define FIFO_ASYNC_OUTPUT_PTHREAD_PRIORITY       (sched_get_priority_max(SCHED_RR) - 1)
 
-static pthread_mutex_t output_lock;
-
-/* asynchronous output log notice */
+static pthread_mutex_t output_mutex_lock;
 static sem_t output_notice_sem;
 /* asynchronous output pthread thread */
 static pthread_t async_output_thread;
@@ -57,29 +55,18 @@ bool thread_running = false;
 /* Initialize OK flag */
 static bool init_ok = false;
 
-// /**
-//  * output log port interface
-//  *
-//  * @param log output of log
-//  * @param size log size
-//  */
-// void fifo_pop(const char *log, size_t size) {
-//     /* output to terminal */
-//     printf("%.*s", (int)size, log);
-// }
-
 /**
  * output lock
  */
 void fifo_platform_output_lock(void) {
-    pthread_mutex_lock(&output_lock);
+    pthread_mutex_lock(&output_mutex_lock);
 }
 
 /**
  * output unlock
  */
 void fifo_platform_output_unlock(void) {
-    pthread_mutex_unlock(&output_lock);
+    pthread_mutex_unlock(&output_mutex_lock);
 }
 
 void fifo_async_put_notice(void) {
@@ -106,7 +93,7 @@ FifoErrCode fifo_async_init(void) {
     struct sched_param thread_sched_param;
 
     sem_init(&output_notice_sem, 0, 0);
-    pthread_mutex_init(&output_lock, NULL);
+    pthread_mutex_init(&output_mutex_lock, NULL);
 
     thread_running = true;
 
@@ -141,7 +128,7 @@ void fifo_async_deinit(void) {
     pthread_join(async_output_thread, NULL);
     
     sem_destroy(&output_notice_sem);
-    pthread_mutex_destroy(&output_lock);
+    pthread_mutex_destroy(&output_mutex_lock);
 
     init_ok = false;
 }

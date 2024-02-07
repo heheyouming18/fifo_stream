@@ -35,7 +35,6 @@
 #define LOG_ASYNC_OUTPUT_TASK_PRIORITY      ( tskIDLE_PRIORITY + 2 )
 
 static SemaphoreHandle_t output_notice_sem;
-// static SemaphoreHandle_t tx_comp_notify_semp;
 static SemaphoreHandle_t output_mutex_lock;
 
 /* thread running flag */
@@ -43,22 +42,11 @@ bool thread_running = false;
 /* Initialize OK flag */
 static bool init_ok = false;
 
-// /**
-//  * output log port interface
-//  *
-//  * @param log output of log
-//  * @param size log size
-//  */
-// void fifo_pop(const char *log, size_t size) {
-//     /* output to terminal */
-//     printf("%.*s", (int)size, log);
-// }
-
 /**
  * output lock
  */
 void fifo_platform_output_lock(void) {
-    // pthread_mutex_lock(&output_lock);
+    // pthread_mutex_lock(&output_mutex_lock);
     xSemaphoreTake(output_mutex_lock, portMAX_DELAY);
 }
 
@@ -66,7 +54,7 @@ void fifo_platform_output_lock(void) {
  * output unlock
  */
 void fifo_platform_output_unlock(void) {
-    // pthread_mutex_unlock(&output_lock);
+    // pthread_mutex_unlock(&output_mutex_lock);
     xSemaphoreGive(output_mutex_lock);
 }
 
