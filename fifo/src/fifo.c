@@ -61,14 +61,13 @@ FifoCallbacks usr_cbs;
 
 static void fifo_set_output_enabled(bool enabled);
 static void fifo_output_lock_enabled(bool enabled);
+extern void fifo_async_put_notice(void);
 /**
  * fifo initialize.
  *
  * @return result
  */
 FifoErrCode fifo_init(FifoCallbacks *cb) {
-    extern FifoErrCode fifo_platform_init(void);
-    extern FifoErrCode fifo_async_init(void);
 
     usr_cbs.fp_fifo_pop = cb->fp_fifo_pop; // add callback for output
 
@@ -77,13 +76,7 @@ FifoErrCode fifo_init(FifoCallbacks *cb) {
     if (s_fifo.init_ok == true) {
         return result;
     }
-
-    /* port initialize */
-    result = fifo_platform_init();
-    if (result != FIFO_NO_ERR) {
-        return result;
-    }
-
+    extern FifoErrCode fifo_async_init(void);
     result = fifo_async_init();
     if (result != FIFO_NO_ERR) {
         return result;
@@ -104,17 +97,12 @@ FifoErrCode fifo_init(FifoCallbacks *cb) {
  *
  */
 void fifo_deinit(void) {
-    extern FifoErrCode fifo_platform_deinit(void);
-    extern FifoErrCode fifo_async_deinit(void);
 
     if (!s_fifo.init_ok) {
         return ;
     }
-    
+    extern FifoErrCode fifo_async_deinit(void);
     fifo_async_deinit();
-
-    /* port deinitialize */
-    fifo_platform_deinit();
 
     s_fifo.init_ok = false;
 }
@@ -158,15 +146,6 @@ void fifo_stop(void) {
 static void fifo_set_output_enabled(bool enabled) {
     s_fifo.output_enabled = enabled;
 }
-
-// /**
-//  * get output is enable or disable
-//  *
-//  * @return enable or disable
-//  */
-// static bool fifo_get_output_enabled(void) {
-//     return s_fifo.output_enabled;
-// }
 
 extern void fifo_platform_output_lock(void);
 extern void fifo_platform_output_unlock(void);
@@ -304,16 +283,30 @@ __exit:
     return size;
 }
 
-void fifo_async_put(const char *log, size_t size) {
-    /* this function must be implement by user when FIFO_ASYNC_OUTPUT_USING_PTHREAD is not defined */
-    extern void fifo_async_put_notice(void);
-    size_t put_size;
+void async_output_task(void *arg) {
+    size_t get_log_size = 0;
+    static char poll_get_buf[OUTPUT_BUF_SIZE - 4];
 
-    put_size = async_put_log(log, size);
-    /* notify output log thread */
-    if (put_size > 0) {
-        fifo_async_put_notice();
+    extern bool thread_running;
+    while(thread_running) {
+        /* waiting log */
+        void fifo_async_get_notice(void);
+        fifo_async_get_notice(); // block until get notice
+        /* polling gets and outputs the log */
+        while(true) {
+            extern size_t fifo_async_get_log(char *log, size_t size);
+            get_log_size = fifo_async_get_log(poll_get_buf, OUTPUT_BUF_SIZE - 4);
+
+            if (get_log_size) {
+                extern FifoCallbacks usr_cbs;
+                if(usr_cbs.fp_fifo_pop != NULL)
+                    usr_cbs.fp_fifo_pop(poll_get_buf, get_log_size);
+            } else {
+                break;
+            }
+        }
     }
+    // return NULL;
 }
 
 /**
@@ -347,17 +340,20 @@ void fifo_push(const char *format, ...) {
     } else {
         log_len = FIFO_ONE_MSG_MAX_SIZE;
     }
-    /* output log */
-    extern void fifo_async_put(const char *log, size_t size);
-    /* raw log will using assert level */
-    fifo_async_put(log_buf, log_len);
+    /* put log to buffer */
+    size_t put_size;
+    put_size = async_put_log(log_buf, log_len);
+    /* notify output log thread */
+    if (put_size > 0) {
+        /* this function must be implement by user when FIFO_ASYNC_OUTPUT_USING_PTHREAD is not defined */
+        fifo_async_put_notice();
+    }
 
     /* unlock output */
     fifo_output_unlock();
 
     va_end(args);
 }
-
 
 /**
  * enable or disable logger output lock

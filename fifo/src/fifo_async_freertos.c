@@ -28,29 +28,15 @@
 
 #include <fifo.h>
 #include <stdio.h>
-#include <pthread.h>
-#include <unistd.h>
-#include <time.h>
-#include <sys/syscall.h>
-#include <string.h>
-#include <sched.h>
-#include <semaphore.h>
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
 
-/* thread default stack size */
-#if PTHREAD_STACK_MIN > 4*1024
-#define FIFO_ASYNC_OUTPUT_PTHREAD_STACK_SIZE     PTHREAD_STACK_MIN
-#else
-#define FIFO_ASYNC_OUTPUT_PTHREAD_STACK_SIZE     (1*1024)
-#endif
-/* thread default priority */
-#define FIFO_ASYNC_OUTPUT_PTHREAD_PRIORITY       (sched_get_priority_max(SCHED_RR) - 1)
+#define LOG_ASYNC_OUTPUT_TASK_PRIORITY      ( tskIDLE_PRIORITY + 2 )
 
-static pthread_mutex_t output_lock;
-
-/* asynchronous output log notice */
-static sem_t output_notice_sem;
-/* asynchronous output pthread thread */
-static pthread_t async_output_thread;
+static SemaphoreHandle_t output_notice_sem;
+// static SemaphoreHandle_t tx_comp_notify_semp;
+static SemaphoreHandle_t output_mutex_lock;
 
 /* thread running flag */
 bool thread_running = false;
@@ -72,22 +58,25 @@ static bool init_ok = false;
  * output lock
  */
 void fifo_platform_output_lock(void) {
-    pthread_mutex_lock(&output_lock);
+    // pthread_mutex_lock(&output_lock);
+    xSemaphoreTake(output_mutex_lock, portMAX_DELAY);
 }
 
 /**
  * output unlock
  */
 void fifo_platform_output_unlock(void) {
-    pthread_mutex_unlock(&output_lock);
+    // pthread_mutex_unlock(&output_lock);
+    xSemaphoreGive(output_mutex_lock);
 }
 
 void fifo_async_put_notice(void) {
-    sem_post(&output_notice_sem);
+    // sem_post(&output_notice_sem);
+    xSemaphoreGive(output_notice_sem);
 }
 
 void fifo_async_get_notice(void) {
-    sem_wait(&output_notice_sem);
+    xSemaphoreTake(output_notice_sem, portMAX_DELAY);
 }
 
 /**
@@ -102,23 +91,25 @@ FifoErrCode fifo_async_init(void) {
         return result;
     }
 
-    pthread_attr_t thread_attr;
-    struct sched_param thread_sched_param;
-
-    sem_init(&output_notice_sem, 0, 0);
-    pthread_mutex_init(&output_lock, NULL);
-
     thread_running = true;
 
-    pthread_attr_init(&thread_attr);
-    pthread_attr_setstacksize(&thread_attr, FIFO_ASYNC_OUTPUT_PTHREAD_STACK_SIZE);
-    pthread_attr_setschedpolicy(&thread_attr, SCHED_RR);
-    thread_sched_param.sched_priority = FIFO_ASYNC_OUTPUT_PTHREAD_PRIORITY;
-    pthread_attr_setschedparam(&thread_attr, &thread_sched_param);
+    // pthread_attr_t thread_attr;
+    // struct sched_param thread_sched_param;
+
+    // sem_init(&output_notice_sem, 0, 0);
+    output_notice_sem = xSemaphoreCreateBinary();
+    output_mutex_lock = xSemaphoreCreateMutex();
+
+    // pthread_attr_init(&thread_attr);
+    // pthread_attr_setstacksize(&thread_attr, FIFO_ASYNC_OUTPUT_PTHREAD_STACK_SIZE);
+    // pthread_attr_setschedpolicy(&thread_attr, SCHED_RR);
+    // thread_sched_param.sched_priority = FIFO_ASYNC_OUTPUT_PTHREAD_PRIORITY;
+    // pthread_attr_setschedparam(&thread_attr, &thread_sched_param);
+    // pthread_create(&async_output_thread, &thread_attr, async_output_task, NULL);
+    // pthread_attr_destroy(&thread_attr);
 
     extern void async_output_task(void *arg);
-    pthread_create(&async_output_thread, &thread_attr, (void *)async_output_task, NULL);
-    pthread_attr_destroy(&thread_attr);
+    xTaskCreate(async_output_task, "async_output_task", configMINIMAL_STACK_SIZE, NULL, LOG_ASYNC_OUTPUT_TASK_PRIORITY, NULL);
 
     init_ok = true;
 
@@ -138,11 +129,19 @@ void fifo_async_deinit(void) {
 
     fifo_async_put_notice();
 
-    pthread_join(async_output_thread, NULL);
+    // pthread_join(async_output_thread, NULL);
     
-    sem_destroy(&output_notice_sem);
-    pthread_mutex_destroy(&output_lock);
+    // sem_destroy(&output_notice_sem);
+    if (output_notice_sem){
+        vSemaphoreDelete(output_notice_sem);
+        output_notice_sem = NULL;
+    }
+    if (output_mutex_lock){
+        vSemaphoreDelete(output_mutex_lock);
+        output_mutex_lock = NULL;
+    }
 
     init_ok = false;
 }
+
 
